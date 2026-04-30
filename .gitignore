@@ -1,0 +1,4 @@
+# ignore cache and pycache
+__pycache__/
+*.pyc
+*.cpython-*-pyc
