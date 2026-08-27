@@ -1,0 +1,41 @@
+# Single config file for transit_tool.py
+#
+# Top-level keys are the transit "modes" the tool looks for (bus, rail, ...).
+# Each mode needs:
+#   suffix       - substring identifying a raw input file as this mode
+#                  (e.g. Miami_bus.geojson -> "_bus.geojson")
+#   name_columns - maps city name -> the column (or list of columns, first
+#                  non-null wins) holding the stop/station name in that
+#                  city's file for this mode.
+#
+# To add a new city: add a line under the right mode's name_columns.
+# To add a new mode (e.g. ferry): copy a whole block below and edit it.
+
+bus:
+  suffix: "_bus.geojson"
+  name_columns:
+    Miami: StopName
+    NYC: DESCRIPTION_BSL
+    Philadelphia: StopName
+    Seattle: HASTUS_CROSS_STREET_NAME
+    Houston: STOPNAME
+    SF: stop_name
+    Atlanta: stop_name
+    Los_Angeles: stop_name
+    Dallas: stop_name
+
+rail:
+  suffix: "_rail.geojson"
+  name_columns:
+    Miami: NAME
+    NYC: STATION_ID
+    Philadelphia:
+      - Station_Na
+      - StopName
+    Seattle: NAME
+    Houston: Stat_Name
+    SF: stop_name
+    Atlanta: STATION
+    Boston: stop_name
+    Los_Angeles: stop_name
+    Dallas: stop_name
