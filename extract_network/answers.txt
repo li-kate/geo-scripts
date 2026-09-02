@@ -1,0 +1,14 @@
+download
+https://download.geofabrik.de/north-america/us-latest.osm.pbf
+osmium_env
+batch
+polygon_boundaries
+*.geojson
+y
+network_output
+y
+smart
+y
+1
+
+
