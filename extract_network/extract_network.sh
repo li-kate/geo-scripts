@@ -5,7 +5,7 @@
 # Interactive pipeline:
 #   1. Get a source .osm.pbf (download from Geofabrik OR use an existing local file)
 #   2. Set up osmium-tool (conda env, for PACE or any machine with conda)
-#   3. Extract area(s):
+#   3. Extract area(s) and sanitize boundary files:
 #        - single: one bounding box OR one polygon file
 #        - batch:  a directory of city/region boundary files, one extract per file
 #   4. Filter the network by tags (checkbox menu, default: w/highway)
@@ -134,40 +134,57 @@ sanitize_one() {
     local out_file="$2"
     local err_log
     local layer_name
+    local sql_layer_name
 
     err_log="$(mktemp)"
 
-    # Get the layer name from the input GeoJSON.
-    layer_name="$(ogrinfo -ro -q "$in_file" 2>/dev/null \
-        | sed -n 's/^[0-9][0-9]*: //p' \
-        | head -n 1)"
+    echo "  Merging all polygons in $(basename "$in_file")..." >&2
+
+    # Get the actual GDAL layer name from the GeoJSON.
+    layer_name="$(
+        ogrinfo -ro -q "$in_file" 2>/dev/null |
+        sed -n 's/^[0-9][0-9]*: \([^ ]*\).*/\1/p' |
+        head -n 1
+    )"
 
     if [[ -z "$layer_name" ]]; then
-        echo "  Warning: Could not determine layer name for $(basename "$in_file"), using the original file instead." >&2
+        echo "  Warning: Could not determine layer name for $(basename "$in_file"), using original file." >&2
         rm -f "$err_log"
         echo "$in_file"
         return
     fi
 
-    # Union all polygon features into one MultiPolygon geometry.
-    # The output filename and location are still exactly $out_file.
+    # Escape double quotes in the layer name for SQLite SQL.
+    sql_layer_name="${layer_name//\"/\"\"}"
+
+    echo "    Layer: $layer_name" >&2
+
+    # GeoJSON driver does not overwrite existing files.
+    rm -f "$out_file"
+
     if ogr2ogr \
         -f GeoJSON \
         "$out_file" \
         "$in_file" \
+        -t_srs EPSG:4326 \
         -dialect SQLite \
-        -sql "SELECT ST_Union(geometry) AS geometry FROM \"$layer_name\"" \
+        -sql "SELECT ST_UnaryUnion(ST_Collect(ST_MakeValid(geometry))) AS geometry FROM \"$sql_layer_name\"" \
         -nln merged_boundary \
         -nlt MULTIPOLYGON \
         -dim 2 \
+        -skipfailures \
         2>"$err_log"; then
 
         rm -f "$err_log"
+
+        # ONLY the output filename goes to stdout.
         echo "$out_file"
     else
         echo "  Warning: ogr2ogr failed to sanitize $(basename "$in_file"), using the original file instead." >&2
         sed 's/^/    /' "$err_log" >&2
         rm -f "$err_log"
+
+        # ONLY the fallback filename goes to stdout.
         echo "$in_file"
     fi
 }
@@ -637,8 +654,8 @@ else
             fi
 
             PENDING_BOUNDARIES+=("$boundary")
-            esc_poly="$(json_escape "$boundary")"
-            esc_out="$(json_escape "$extract_out")"
+            esc_poly="$(json_escape "$(realpath "$boundary")")"
+            esc_out="$(json_escape "$(realpath -m "$extract_out")")"
 
             if [[ "$first" == "true" ]]; then
                 first=false
