@@ -1,24 +1,4 @@
 #!/usr/bin/env bash
-#
-# extract_network.sh
-#
-# Interactive pipeline:
-#   1. Get a source .osm.pbf (download from Geofabrik OR use an existing local file)
-#   2. Set up osmium-tool (conda env, for PACE or any machine with conda)
-#   3. Extract area(s) and sanitize boundary files:
-#        - single: one bounding box OR one polygon file
-#        - batch:  a directory of city/region boundary files, one extract per file
-#   4. Filter the network by tags (checkbox menu, default: w/highway)
-#   5. Export the filtered network to GeoJSON (checkbox menu for attributes/options,
-#      default matches: --add-unique-id=type_id --attributes=id,version,type)
-#
-# In batch mode, steps 4 and 5 choices are made ONCE and applied to every
-# boundary in the directory, so you get one filtered .osm.pbf and one
-# .geojson per boundary file.
-#
-# The script asks before doing anything it can't safely infer, and will not
-# overwrite existing files without asking first (unless you opt into
-# "overwrite all" for a batch run).
 
 set -euo pipefail
 
@@ -94,99 +74,6 @@ check_or_skip_overwrite() {
 
 require_cmd() {
     command -v "$1" >/dev/null 2>&1
-}
-
-# offer_sanitize_check: asks whether to sanitize boundary file(s) with
-# ogr2ogr, and if ogr2ogr isn't installed, explains how to get it and lets
-# the user either continue unsanitized or exit to go install it.
-# Echoes "y" or "n" (the resolved decision) on stdout.
-offer_sanitize_check() {
-    local default="${1:-y}"
-    local reply
-    reply=$(ask "Sanitize boundary file(s) with ogr2ogr before extracting? (fixes 3D coordinates, mixed/invalid geometry types -- requires GDAL)" "$default")
-    if [[ "$reply" =~ ^[Yy] ]]; then
-        if ! require_cmd ogr2ogr; then
-            echo "ogr2ogr (GDAL) not found on PATH." >&2
-            echo "Install it with one of:" >&2
-            echo "  module load gdal" >&2
-            echo "  conda install -n <your_osmium_env> -c conda-forge gdal" >&2
-            if confirm "Continue WITHOUT sanitizing?"; then
-                echo "n"
-                return
-            else
-                echo "Exiting so you can install GDAL and re-run." >&2
-                exit 1
-            fi
-        fi
-        echo "y"
-    else
-        echo "n"
-    fi
-}
-
-# sanitize_one: run ogr2ogr on a single GeoJSON boundary file.
-# All polygon features are merged/unioned into one MultiPolygon geometry.
-#
-# sanitize_one <input_file> <output_file>
-# Falls back to the original file (and warns) if ogr2ogr fails on it.
-sanitize_one() {
-    local in_file="$1"
-    local out_file="$2"
-    local err_log
-    local layer_name
-    local sql_layer_name
-
-    err_log="$(mktemp)"
-
-    echo "  Merging all polygons in $(basename "$in_file")..." >&2
-
-    # Get the actual GDAL layer name from the GeoJSON.
-    layer_name="$(
-        ogrinfo -ro -q "$in_file" 2>/dev/null |
-        sed -n 's/^[0-9][0-9]*: \([^ ]*\).*/\1/p' |
-        head -n 1
-    )"
-
-    if [[ -z "$layer_name" ]]; then
-        echo "  Warning: Could not determine layer name for $(basename "$in_file"), using original file." >&2
-        rm -f "$err_log"
-        echo "$in_file"
-        return
-    fi
-
-    # Escape double quotes in the layer name for SQLite SQL.
-    sql_layer_name="${layer_name//\"/\"\"}"
-
-    echo "    Layer: $layer_name" >&2
-
-    # GeoJSON driver does not overwrite existing files.
-    rm -f "$out_file"
-
-    if ogr2ogr \
-        -f GeoJSON \
-        "$out_file" \
-        "$in_file" \
-        -t_srs EPSG:4326 \
-        -dialect SQLite \
-        -sql "SELECT ST_UnaryUnion(ST_Collect(ST_MakeValid(geometry))) AS geometry FROM \"$sql_layer_name\"" \
-        -nln merged_boundary \
-        -nlt MULTIPOLYGON \
-        -dim 2 \
-        -skipfailures \
-        2>"$err_log"; then
-
-        rm -f "$err_log"
-
-        # ONLY the output filename goes to stdout.
-        echo "$out_file"
-    else
-        echo "  Warning: ogr2ogr failed to sanitize $(basename "$in_file"), using the original file instead." >&2
-        sed 's/^/    /' "$err_log" >&2
-        rm -f "$err_log"
-
-        # ONLY the fallback filename goes to stdout.
-        echo "$in_file"
-    fi
 }
 
 # checkbox_menu: present a numbered list, let user pick multiple by comma-separated
@@ -392,9 +279,8 @@ echo
 
 echo "--- Step 3: Extract area(s) from $PBF_FILENAME ---"
 echo "You can either:"
-echo "  1) single -- extract ONE area, via a bounding box or ONE polygon file"
-echo "  2) batch  -- extract ONE area PER boundary file in a directory"
-echo "              (e.g. a folder of city-boundary .geojson files clipped from a state/country .osm.pbf)"
+echo "  1) single -- extract ONE area, via a bounding box or ONE preprocessed WGS84 polygon file"
+echo "  2) batch  -- extract ONE area PER preprocessed WGS84 boundary file in a directory"
 echo
 
 AREA_MODE=$(ask "Choose 'single' or 'batch'" "single")
@@ -426,17 +312,10 @@ case "$AREA_MODE" in
                     osmium extract -b "$BBOX" "$PBF_FILENAME" -o "$EXTRACT_OUTPUT" -s "$STRATEGY" $ow_flag
                     ;;
                 polygon)
-                    POLY_FILE=$(ask "Path to the polygon file (e.g. MPO_boundary_reprojected.geojson)")
+                    POLY_FILE=$(ask "Path to the preprocessed WGS84 polygon file (e.g. boundaries_wgs84/Atlanta.geojson)")
                     if [[ ! -f "$POLY_FILE" ]]; then
                         echo "Error: polygon file '$POLY_FILE' not found. Exiting."
                         exit 1
-                    fi
-                    if [[ "$POLY_FILE" == *.geojson || "$POLY_FILE" == *.json ]]; then
-                        DO_SANITIZE=$(offer_sanitize_check "n")
-                        if [[ "$DO_SANITIZE" == "y" ]]; then
-                            CLEAN_POLY="$(mktemp --suffix=.geojson)"
-                            POLY_FILE="$(sanitize_one "$POLY_FILE" "$CLEAN_POLY")"
-                        fi
                     fi
                     echo "Running: osmium extract --polygon $POLY_FILE $PBF_FILENAME -o $EXTRACT_OUTPUT -s $STRATEGY $ow_flag"
                     osmium extract --polygon "$POLY_FILE" "$PBF_FILENAME" -o "$EXTRACT_OUTPUT" -s "$STRATEGY" $ow_flag
@@ -452,7 +331,11 @@ case "$AREA_MODE" in
         ;;
 
     batch)
-        BOUNDARY_DIR=$(ask "Path to the directory containing boundary files (one per city/area)")
+        BOUNDARY_DIR=$(ask \
+            "Path to the directory containing preprocessed WGS84 boundary files" \
+            "boundaries/boundaries_wgs84"
+        )
+
         if [[ ! -d "$BOUNDARY_DIR" ]]; then
             echo "Error: directory '$BOUNDARY_DIR' not found. Exiting."
             exit 1
@@ -484,21 +367,8 @@ case "$AREA_MODE" in
         EXTRACT_DIR="$OUTPUT_DIR/extracted"
         FILTERED_DIR="$OUTPUT_DIR/filtered"
         GEOJSON_DIR="$OUTPUT_DIR/geojson"
-        CLEAN_DIR="$OUTPUT_DIR/boundaries_clean"
-        mkdir -p "$EXTRACT_DIR" "$FILTERED_DIR" "$GEOJSON_DIR"
 
-        DO_SANITIZE=$(offer_sanitize_check "y")
-        if [[ "$DO_SANITIZE" == "y" ]]; then
-            mkdir -p "$CLEAN_DIR"
-            echo "Sanitizing ${#BOUNDARY_FILES[@]} boundary file(s) into $CLEAN_DIR ..."
-            declare -a CLEANED_FILES=()
-            for f in "${BOUNDARY_FILES[@]}"; do
-                clean_f="$CLEAN_DIR/$(basename "$f")"
-                CLEANED_FILES+=("$(sanitize_one "$f" "$clean_f")")
-            done
-            BOUNDARY_FILES=("${CLEANED_FILES[@]}")
-            echo "Done sanitizing."
-        fi
+        mkdir -p "$EXTRACT_DIR" "$FILTERED_DIR" "$GEOJSON_DIR"
 
         STRATEGY=$(ask "osmium extract strategy (-s flag) to use for every boundary: 'simple', 'complete_ways', or 'smart'" "smart")
 
@@ -681,9 +551,9 @@ else
         echo "Running one-pass extract for ${#PENDING_BOUNDARIES[@]} boundary/boundaries (single read of $PBF_FILENAME):"
         echo "Running: osmium extract ${EXTRACT_ARGS[*]} $PBF_FILENAME"
         if ! osmium extract "${EXTRACT_ARGS[@]}" "$PBF_FILENAME"; then
-            echo "Warning: the single-pass batch extract failed (often means one boundary's"
-            echo "geometry is still invalid even after sanitizing). Falling back to extracting"
-            echo "each pending boundary one at a time, so a bad boundary doesn't block the rest."
+            echo "Warning: the single-pass batch extract failed."
+            echo "Falling back to extracting each pending boundary one at a time,"
+            echo "so a bad boundary doesn't block the rest."
             echo
             for boundary in "${PENDING_BOUNDARIES[@]}"; do
                 name="$(basename "$boundary")"

@@ -1,38 +1,4 @@
 #!/usr/bin/env bash
-#
-# preprocess_boundaries.sh
-#
-# Automatically preprocess city boundary GeoJSON files.
-#
-# The script asks the user for:
-#   1. Input boundary directory
-#   2. Output directory
-#   3. Buffer distance in meters
-#   4. Output format:
-#        1 = NAD83 / UTM only
-#        2 = WGS84 only
-#        3 = Both
-#
-# Processing for each city:
-#   1. Convert boundary to WGS84 (EPSG:4326)
-#   2. Determine UTM zone automatically
-#   3. Select corresponding NAD83 / UTM CRS
-#   4. Reproject into that CRS
-#   5. Make geometries valid
-#   6. Dissolve all features into one geometry
-#   7. Apply the requested buffer in meters
-#   8. Write the requested output(s)
-#
-# NAD83 / UTM output:
-#   - projected coordinates
-#   - coordinates are in meters
-#
-# WGS84 output:
-#   - EPSG:4326
-#   - coordinates are longitude/latitude
-#
-# No city-specific EPSG list is required.
-#
 
 set -euo pipefail
 
