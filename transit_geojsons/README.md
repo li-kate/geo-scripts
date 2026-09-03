@@ -1,7 +1,6 @@
 # transit_geojsons.py
 
-Command-line replacement for the old `cities.py` + `merge_geojsons.py` scripts.
-Two subcommands: `clip` and `merge`. No paths or per-city logic are hardcoded
+Command-line script for subcommands `clip` and `merge`. No paths or per-city logic are hardcoded
 in the script — everything is a flag or lives in **one** YAML config file
 (`config.yaml`) that both subcommands share.
 
