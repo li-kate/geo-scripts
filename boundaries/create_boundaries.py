@@ -11,13 +11,12 @@ import json
 import glob
 import os
 import sys
-from shapely.geometry import shape, MultiPoint, Point, LineString, Polygon
+from shapely.geometry import shape, MultiPoint
 from pyproj import Transformer, CRS
 import geopandas as gpd
 import pandas as pd
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.spatial_utils import validate_geometries
 
 
 def get_epsg_from_geojson(data):

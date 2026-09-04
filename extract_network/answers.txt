@@ -6,9 +6,7 @@ polygon_boundaries
 *.geojson
 y
 network_output
-y
 smart
 y
-1
 
 
