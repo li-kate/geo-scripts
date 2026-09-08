@@ -1,27 +1,3 @@
-"""
-Merges UTCI heat attributes from a GeoJSON (with OSM IDs) into an OSM PBF,
-producing an enriched OSM XML file that preserves ALL original OSM node
-and way IDs exactly as they appear in the source PBF. No synthetic IDs,
-no way-splitting.
-
-This uses pyosmium instead of pyrosm, because pyrosm's get_network() is a
-routing-graph extractor: it splits ways at intersections (new way IDs) and
-discards/replaces intermediate node geometry (synthetic node IDs) once it
-builds the graph. osmium reads the PBF's native data model directly, so a
-way with id 12345 in the source file stays way id 12345 in the output,
-with the exact same ordered list of node references it had originally.
-
-Install:
-    pip install osmium geopandas pandas numpy
-
-Usage:
-    python osm_heat_merge_idsafe.py \
-        --heat-path Atlanta-260503-UTCI.geojson \
-        --pbf-path atlanta-260503-filtered.osm.pbf \
-        --output-path output/Atlanta-260503-UTCI.osm \
-        --heat-cols UTCI_07 UTCI_08 UTCI_09 UTCI_10 UTCI_11 UTCI_12 UTCI_13 UTCI_14 UTCI_15 UTCI_16 UTCI_17 UTCI_18 UTCI_19 UTCI_20
-"""
-
 import os
 import time
 import argparse

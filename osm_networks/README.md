@@ -92,3 +92,28 @@ The following questions correspond to the entries in `answers.txt`:
 | 10 | Tag filter selection | `1` |
 | 11 | Attribute selection | `1,2,3` |
 | 12 | Unique ID mode | `1` |
+
+# matching.py
+Merges attributes from a GeoJSON (with OSM IDs) into an OSM PBF,
+producing an enriched OSM XML file that preserves ALL original OSM node
+and way IDs exactly as they appear in the source PBF. No synthetic IDs,
+no way-splitting.
+
+This uses pyosmium instead of pyrosm, because pyrosm's get_network() is a
+routing-graph extractor: it splits ways at intersections (new way IDs) and
+discards/replaces intermediate node geometry (synthetic node IDs) once it
+builds the graph. osmium reads the PBF's native data model directly, so a
+way with id 12345 in the source file stays way id 12345 in the output,
+with the exact same ordered list of node references it had originally.
+
+Install:
+    pip install osmium geopandas pandas numpy
+    
+Usage:
+python -u matching.py \
+    --heat-path "/storage/home/hcoda1/1/kli605/scratch/safe_routes/Atlanta-062226_UTCI_alltime.geojson" \
+    --pbf-path "/storage/home/hcoda1/1/kli605/scratch/safe_routes/georgia-240101.osm.pbf" \
+    --output-path "./Atlanta-20240101-UTCI.osm" \
+    --heat-cols UTCI_07 UTCI_08 UTCI_09 UTCI_10 UTCI_11 UTCI_12 UTCI_13 UTCI_14 UTCI_15 UTCI_16 UTCI_17 UTCI_18 UTCI_19 UTCI_20 NDVI
+
+Produces a new osm file (not pbf) and only keeps the links that match with the geojson.
