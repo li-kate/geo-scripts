@@ -1,0 +1,93 @@
+graphhopper:
+  datareader.file: "atlanta-20240101.osm.pbf"
+  graph.location: graph-cache
+  graph.encoded_values: osm_way_id, foot_access, hike_rating, mtb_rating, foot_priority, foot_average_speed, average_slope, bike_priority, bike_access, roundabout, bike_average_speed, foot_road_access, road_environment, ferry_speed
+  # custom_models.directory: "custom_models"
+  profiles:
+   - name: foot
+     custom_model_files: [foot.json, foot_elevation.json]
+     turn_costs:
+      vehicle_types: [foot]
+  # profiles:
+  #  - name: bike
+  #    custom_model_files: [bike.json, bike_elevation.json]
+  #   #  turn_costs:
+  #   #   vehicle_types: [bike]
+  prepare.ch:
+    profiles: []
+
+  # profiles_lm:
+  # - profile: walk_custom
+
+  # Ignore motor vehicle highways to keep graph smaller
+  import.osm.ignored_highways: motorway,trunk,primary
+
+  # Default RAM storage (adjust if needed)
+  graph.dataaccess.default_type: RAM_STORE
+  graph.dataaccess.default_store_details: true
+
+  graph.elevation.provider: srtm
+
+  # Disable GTFS real-time
+  gtfs_realtime:
+    enabled: false
+
+  map_matching:
+    enabled: true
+  # Optional: tuning alternatives or routing limits can be done at query time
+
+  # Custom models directory if you want
+  # custom_models:
+  #   directory: custom_models
+
+# Dropwizard server config (unchanged)
+server:
+  application_connectors:
+    - type: http
+      port: 8989
+      bind_host: 0.0.0.0
+  admin_connectors:
+    - type: http
+      port: 8990
+      bind_host: localhost
+
+logging:
+  appenders:
+    - type: file
+      time_zone: UTC
+      current_log_filename: logs/graphhopper.log
+      log_format: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+      archive: true
+      archived_log_filename_pattern: ./logs/graphhopper-%d.log.gz
+      archived_file_count: 30
+      never_block: true
+    - type: console
+      time_zone: UTC
+      log_format: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+  loggers:
+    "com.graphhopper.osm_warnings":
+      level: DEBUG
+      additive: false
+      appenders:
+        - type: file
+          currentLogFilename: logs/osm_warnings.log
+          archive: false
+          logFormat: '[%level] %msg%n' 
+    "com.graphhopper.routing":  
+      level: TRACE
+      additive: false
+      appenders:
+        - type: file
+          currentLogFilename: logs/osm_warnings.log
+          archive: false
+          logFormat: '[%level] %msg%n' 
+    "com.graphhopper.routing.ev":  # encoded values
+      level: DEBUG
+      additive: false
+      appenders:
+        - type: console
+    "com.graphhopper.custommodel":  # custom model stuff
+      level: DEBUG
+      additive: false
+      appenders:
+        - type: console
